@@ -1,0 +1,3 @@
+# Runtime endpoints (moved out of code so ops can change them without a release)
+address_verification:
+  url: https://api.addressverify.example/v1/verify
