@@ -1,35 +1,44 @@
 # Guideline-to-control mapping
 
-> **Verify before presenting.** Section and article numbers below are from our reading of
+> **Verify before presenting.** The digest paraphrases the guidelines; it is not the official text. References are from our reading of
 > EBA/GL/2019/02 (Outsourcing), EBA/GL/2019/04 (ICT & security risk) and DORA (Reg. (EU) 2022/2554).
 > Confirm them against the official texts and the bank's current scoping. For DORA-scope entities,
 > DORA and its RTS now govern ICT third-party risk and the EBA ICT guidelines are largely superseded;
 > the EBA outsourcing guidelines still matter for non-ICT outsourcing. Names such as "ExampleBank" are placeholders.
 
-## 1. Control chain: where each guideline requirement shows up
+## 1. Control chain (single source of truth: `EBA_ICT_OUTSOURCING_CONTROLS.md`)
 
-| Guideline requirement | What it asks for | Where it lives in this demo | Layer |
+Section numbers and paragraph ranges below were checked against the published tables of contents of
+EBA/GL/2019/02 and EBA/GL/2019/04. DORA article numbers remain unverified.
+
+| Control ID | Guideline reference | Where it lives in this demo | Layer |
 |---|---|---|---|
-| **EBA OUTS s.11 Documentation / DORA Art.28(3)** Register of arrangements / information | Maintain a register of all third-party arrangements with criticality, data, subcontractors | `governance/approved-vendors.yaml`, `tools/export_register.py`, rule **VG-004**, **VG-006** | Register + CI |
-| **EBA OUTS s.12 Pre-outsourcing analysis / DORA Art.28(4)** | Risk assessment and due diligence *before* relying on a provider; identify critical or important functions | Unknown host/SDK cannot pass: **VG-001**, **VG-002**; CodeRabbit checks `ICT-3P-Endpoint-Allowlist`, `ICT-3P-SDK-Approval`; register fields `assessment_ticket`, `criticality` | CodeRabbit + CI |
-| **EBA OUTS s.12 (data protection part of risk assessment)** | Assess data exposure to provider | `@third_party(vendor, data_classes)`, rule **VG-005**, CodeRabbit `ICT-3P-Data-Minimisation`, import-time `GovernanceError` | CodeRabbit + CI + runtime |
-| **EBA OUTS s.14 Oversight / DORA Art.28 ongoing monitoring** | Continuous monitoring of provider, periodic review | `next_review` expiry check (**VG-006**, demo step 3), audit log of every allowed/denied call (`ict.audit`) | CI + runtime |
-| **EBA OUTS s.15 Exit strategies / DORA Art.28(8)** | Documented, tested exit and stressed-exit plans for critical functions | `exit_plan` must exist (**VG-006**), `docs/exit/V-002.md`, fail-closed `HELD_FOR_REVIEW` path + test | CI + code |
-| **EBA OUTS s.9 / EBA ICT s.3.7 Business continuity** | Continuity when a provider fails | `PaymentOrchestrator` outage handling; tests `test_vendor_outage_fails_closed_to_manual_review` | Code + tests |
-| **EBA ICT s.3.6.2 Acquisition & development; s.3.6.3 Change management** | Controlled acquisition of components; approved, reviewed changes | CODEOWNERS, CodeRabbit `request_changes_workflow`, `ICT-Register-Change-Control`, CI gate | Process + CodeRabbit |
-| **EBA ICT s.3.4 Information security (logical/network security, data protection) / DORA Art.9** | Restrict and monitor external connectivity; protect data | `egress.py` is the only module allowed to open connections (**VG-003**); runtime allowlist per vendor; audit trail | CI + runtime |
-| **EBA OUTS s.6-7 Governance / outsourcing policy** | Accountability, clear ownership | CODEOWNERS (TPRM, security architects), register is the policy artefact | Process |
+| **OUTS-11** Register | EBA/GL/2019/02 s.11 (paras 52-60); DORA Art.28(3) | `governance/approved-vendors.yaml`, `tools/export_register.py`, VG-001, VG-004, VG-006 | Register + CI |
+| **OUTS-12.2** Risk assessment | s.12.2 (paras 64-68) | VG-001, VG-005; CodeRabbit data-minimisation check; `assessment_ticket`, `data_classes` | CodeRabbit + CI |
+| **OUTS-12.3** Due diligence | s.12.3 (paras 69-73) | VG-001, VG-002, expiry check VG-006; `next_review` | CodeRabbit + CI |
+| **OUTS-13.2** Security of data and systems | s.13.2 (paras 81-84) | VG-005, `@third_party` data classes, `data_location` | CI + runtime |
+| **OUTS-14** Oversight | s.14 (paras 100-105) | `ict.audit` log, review expiry (VG-006) | Runtime + CI |
+| **OUTS-15** Exit | s.15 (paras 106-108); DORA Art.28(8) | `exit_plan` file required (VG-006), fail-closed `HELD_FOR_REVIEW` path | CI + code |
+| **OUTS-09 / ICT-3.5** Continuity, operations | EBA/GL/2019/02 s.9 (paras 48-49); EBA/GL/2019/04 s.3.5 (paras 50-60) | Timeouts, fail-closed orchestrator, `ICT-Vendor-Resilience` check | CodeRabbit + tests |
+| **ICT-3.3.3** Classification | EBA/GL/2019/04 s.3.3.3 (paras 17-21) | Data-class taxonomy in the register, VG-005 | CI + runtime |
+| **ICT-3.4.2** Logical security | s.3.4.2 (paras 31-32) | `egress.py` is the only outbound path (VG-003), per-vendor host allowlist | CI + runtime |
+| **ICT-3.4.5** Security monitoring | s.3.4.5 (paras 38-40) | Audit log of allow and deny decisions | Runtime |
+| **ICT-3.6.2** Acquisition and development | s.3.6.2 (paras 67-74) | Approved libraries and SDKs (VG-002) | CodeRabbit + CI |
+| **ICT-3.6.3** Change management | s.3.6.3 (paras 75-76) | CODEOWNERS, `request_changes_workflow`, `ICT-Register-Change-Control` | Process + CodeRabbit |
 
 ## 2. Rule reference (vendor_guard)
 
-| Rule | Detects | Primary references |
+| Rule | Detects | Controls cited |
 |---|---|---|
-| VG-001 | Host not in register, or host belongs to a different vendor than declared | OUTS s.12, DORA 28(4) |
-| VG-002 | SDK/library not approved (code imports and requirements) | ICT s.3.6.2, OUTS s.12 |
-| VG-003 | Direct HTTP/socket/SMTP use outside `egress.py`; endpoint from env/config | ICT s.3.4, DORA Art.9 |
-| VG-004 | External endpoint used without `@third_party` declaration | OUTS s.11, DORA 28(3) |
-| VG-005 | Data class sent to vendor not approved for it | ICT s.3.4, OUTS s.12 |
-| VG-006 | Vendor record incomplete, review expired, exit plan missing | OUTS s.11/14/15, DORA 28(3)/(8) |
+| VG-001 | Host not in register, or host belongs to a different vendor than declared | OUTS-12.2, OUTS-12.3, OUTS-11 |
+| VG-002 | SDK/library not approved (code imports and requirements) | ICT-3.6.2, OUTS-12.3 |
+| VG-003 | Direct HTTP/socket/SMTP use outside `egress.py`; endpoint from env/config | ICT-3.4.2, ICT-3.4.5 |
+| VG-004 | External endpoint used without `@third_party` declaration | OUTS-11 |
+| VG-005 | Data class sent to vendor not approved for it | ICT-3.3.3, OUTS-13.2, OUTS-12.2 |
+| VG-006 | Vendor record incomplete, review expired, exit plan missing | OUTS-11, OUTS-14, OUTS-15 |
+
+`tests/test_traceability.py` fails the build if any rule or the CodeRabbit config cites a control ID that
+does not exist in the digest.
 
 ## 3. Who does what (defence in depth)
 
