@@ -1,0 +1,5 @@
+/governance/                       @examplebank/tprm-team @examplebank/ict-risk
+/payment_service/integrations/     @examplebank/security-architects
+/payment_service/egress.py         @examplebank/security-architects
+/payment_service/governance.py     @examplebank/security-architects
+/requirements*.txt                 @examplebank/security-architects

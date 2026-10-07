@@ -1,0 +1,15 @@
+name: third-party-ict-gate
+on: [pull_request]
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements.txt pytest
+      - run: python tools/vendor_guard.py --json vendor-guard-report.json
+      - run: pytest -q
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: vendor-guard-report, path: vendor-guard-report.json}

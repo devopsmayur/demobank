@@ -1,0 +1,51 @@
+# Register of approved ICT third-party service providers (demo data, fictional vendors).
+# Single source of truth for: CodeRabbit review checks, CI vendor_guard, runtime egress control,
+# and the export to the DORA Register of Information.
+version: 1
+last_reviewed: 2026-09-15
+
+# Data classification taxonomy used in @third_party(...) declarations
+data_classes: [customer_name, iban, amount, email_address, device_id]
+
+# General-purpose libraries pre-approved by architecture board (no external data flow)
+libraries:
+  - {package: pyyaml, import: yaml}
+  - {package: pytest, import: pytest}
+
+vendors:
+  - id: V-001
+    name: Core Banking Gateway
+    type: internal
+    hosts: ["core-banking.internal.examplebank.test"]
+    data_classes: [customer_name, iban, amount]
+
+  - id: V-002
+    name: SanctionShield (sanctions screening SaaS)
+    type: external
+    service: Real-time sanctions and PEP screening of payments
+    hosts: ["api.sanctionshield.example"]
+    sdk: {package: sanctionshield-sdk, import: sanctionshield}
+    criticality: critical_or_important
+    data_classes: [customer_name, iban]
+    dora_register_id: RoI-2025-0042
+    assessment_ticket: TPRM-1182
+    approved_on: 2026-03-01
+    next_review: 2027-03-01
+    exit_plan: docs/exit/V-002.md
+    subcontractors: ["CloudHost EU-West"]
+    data_location: EEA
+
+  - id: V-003
+    name: MailRelay (transactional e-mail)
+    type: external
+    service: Payment confirmation e-mails
+    hosts: ["api.mailrelay.example"]
+    criticality: non_critical
+    data_classes: [email_address]
+    dora_register_id: RoI-2025-0077
+    assessment_ticket: TPRM-1240
+    approved_on: 2026-06-30
+    next_review: 2027-06-30
+    exit_plan: docs/exit/V-003.md
+    subcontractors: []
+    data_location: EEA

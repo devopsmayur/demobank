@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Validate against the current CodeRabbit schema before rollout (keys evolve).
+language: "en-US"
+reviews:
+  profile: "assertive"
+  request_changes_workflow: true
+
+  path_instructions:
+    - path: "payment_service/integrations/**"
+      instructions: |
+        This folder is the ONLY place where data may leave the bank's trust boundary.
+        - Each function that talks to an external endpoint must carry
+          @third_party("<vendor id>", [<data classes>]) matching governance/approved-vendors.yaml.
+        - Outbound calls must use payment_service.egress.guarded_post_json. Flag direct use of
+          requests/httpx/urllib/socket/smtplib or any endpoint taken from env vars or config.
+        - Flag any new data field added to a vendor payload that is not in that vendor's data_classes.
+        - Flag removal of timeouts, retries/fallbacks, or the fail-closed behaviour for critical vendors.
+    - path: "governance/**"
+      instructions: |
+        Changes to the vendor register are control changes. Require a TPRM ticket reference
+        in the PR description, and check that every external vendor has dora_register_id,
+        assessment_ticket, next_review, exit_plan and data_location. Flag any widening of
+        hosts or data_classes without a linked re-assessment.
+    - path: "**/requirements*.txt"
+      instructions: |
+        Every added or changed dependency must exist in governance/approved-vendors.yaml
+        (libraries or a vendor sdk). Flag unpinned versions and SDKs that call external services.
+    - path: "**/{Dockerfile,*.tf,*.tfvars,helm/**,k8s/**}"
+      instructions: |
+        Flag new egress rules, public endpoints, new cloud services/regions, and secrets or
+        vendor URLs added to infrastructure code.
+
+  pre_merge_checks:
+    custom_checks:
+      - name: "ICT-3P-Endpoint-Allowlist"
+        mode: "error"
+        instructions: |
+          FAIL if the PR adds or changes any hostname, URL, webhook, queue/bucket name or
+          connection string that is not listed under `hosts` in governance/approved-vendors.yaml.
+          FAIL if an endpoint is read from an environment variable or remote config in application
+          code instead of being declared in the register. PASS otherwise.
+      - name: "ICT-3P-SDK-Approval"
+        mode: "error"
+        instructions: |
+          FAIL if the PR adds a dependency or import of an SDK/client library for an external
+          service that is not listed as `libraries` or a vendor `sdk` in governance/approved-vendors.yaml.
+          FAIL if a new HTTP/gRPC/SMTP client is imported outside payment_service/egress.py.
+          PASS if no new dependencies or only approved ones are added.
+      - name: "ICT-3P-Data-Minimisation"
+        mode: "error"
+        instructions: |
+          FAIL if a function decorated with @third_party sends a field whose data class is not
+          in that vendor's `data_classes`, or if the decorator lists a class that is not approved.
+          PASS otherwise.
+      - name: "ICT-Register-Change-Control"
+        mode: "warning"
+        instructions: |
+          If governance/approved-vendors.yaml changes, FAIL unless the PR description contains a
+          TPRM ticket id (pattern TPRM-\d+) and any new external vendor has all of: dora_register_id,
+          criticality, exit_plan (existing file), next_review, data_location. PASS if the file is unchanged.
