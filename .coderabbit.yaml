@@ -39,6 +39,11 @@ reviews:
           (EBA controls OUTS-13.2, ICT-3.3.3)
         - Flag removal of timeouts, retries/fallbacks, or the fail-closed behaviour for critical vendors.
           (EBA controls OUTS-09, ICT-3.5)
+        - Compare every key in a vendor payload with that vendor's data_classes in the register, even if the
+          @third_party decorator looks correct: a correct declaration does not prove a compliant payload.
+          (EBA controls OUTS-13.2, ICT-3.3.3)
+        - Flag logging of request or response payloads, or of personal data (IBAN, names, e-mail, addresses).
+          (EBA controls OUTS-13.2, ICT-3.4.5)
         Cite the control ID and EBA_ICT_OUTSOURCING_CONTROLS.md in each finding.
     - path: "governance/**"
       instructions: |
@@ -48,6 +53,30 @@ reviews:
         hosts or data_classes without a linked re-assessment. Flag a critical_or_important vendor without
         an existing exit_plan file (OUTS-15) or without subcontractors information (OUTS-13.1).
         Cite the control ID and EBA_ICT_OUTSOURCING_CONTROLS.md in each finding.
+    - path: "payment_service/egress.py"
+      instructions: |
+        Control-plane code. Flag any change that raises the default timeout above 10 seconds, removes or
+        weakens audit logging, broadens host matching, or adds a bypass path.
+        (EBA controls ICT-3.4.2, ICT-3.4.5, OUTS-09, ICT-3.6.3)
+        Cite the control ID and EBA_ICT_OUTSOURCING_CONTROLS.md in each finding.
+    - path: "payment_service/orchestrator.py"
+      instructions: |
+        Flag any change that turns fail-closed handling into fail-open for a critical_or_important vendor
+        (for example continuing to release a payment when the sanctions or fraud provider errors), or that
+        removes the manual-review route. (EBA controls OUTS-09, OUTS-15, ICT-3.5)
+        Cite the control ID and EBA_ICT_OUTSOURCING_CONTROLS.md in each finding.
+    - path: "tests/**"
+      instructions: |
+        Flag deleted, skipped, renamed-and-inverted or weakened tests that assert fail-closed behaviour,
+        manual-review routing, egress denial, data minimisation or the audit trail. A test rewritten so that
+        it passes after a control was removed is a finding. (EBA controls OUTS-09, ICT-3.5, ICT-3.6.3)
+        Cite the control ID and EBA_ICT_OUTSOURCING_CONTROLS.md in each finding.
+    - path: "config/**"
+      instructions: |
+        Endpoints must not live in configuration. Flag any URL or hostname in config that is not listed under
+        `hosts` in governance/approved-vendors.yaml, and any code that reads an endpoint from config.
+        (EBA controls OUTS-11, ICT-3.4.2)
+        Cite the control ID and EBA_ICT_OUTSOURCING_CONTROLS.md in each finding.
     - path: "**/requirements*.txt"
       instructions: |
         Every added or changed dependency must exist in governance/approved-vendors.yaml
@@ -56,7 +85,8 @@ reviews:
     - path: "**/{Dockerfile,*.tf,*.tfvars,helm/**,k8s/**}"
       instructions: |
         Flag new egress rules, public endpoints, new cloud services/regions, and secrets or
-        vendor URLs added to infrastructure code. Cite EBA controls ICT-3.4.2 and OUTS-13.2
+        vendor URLs added to infrastructure code. Flag any egress rule open to 0.0.0.0/0 or ::/0 and any
+        "temporary" network exception. Cite EBA controls ICT-3.4.2 and OUTS-13.2
         and EBA_ICT_OUTSOURCING_CONTROLS.md.
 
   pre_merge_checks:
@@ -90,11 +120,14 @@ reviews:
           In the explanation, cite EBA controls OUTS-13.2, ICT-3.3.3 and OUTS-12.2 with section and
           paragraph range from EBA_ICT_OUTSOURCING_CONTROLS.md.
       - name: "ICT-Vendor-Resilience"
-        mode: "warning"
+        mode: "error"
         instructions: |
           FAIL if a changed or added outbound call to an external vendor has no explicit timeout, or if
-          the PR removes retries, fallbacks, manual-review routing or fail-closed behaviour for a vendor
-          whose criticality is critical_or_important in governance/approved-vendors.yaml. PASS otherwise.
+          the PR raises a timeout above 10 seconds, or removes retries, fallbacks, manual-review routing or
+          fail-closed behaviour for a vendor whose criticality is critical_or_important in
+          governance/approved-vendors.yaml (for example continuing to release a payment when that vendor
+          errors). ALSO FAIL if the PR deletes or inverts a test that asserts fail-closed behaviour.
+          PASS otherwise.
           In the explanation, cite EBA controls OUTS-09 and ICT-3.5 from EBA_ICT_OUTSOURCING_CONTROLS.md.
       - name: "ICT-Register-Change-Control"
         mode: "warning"

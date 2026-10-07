@@ -42,7 +42,7 @@
 ### OUTS-09 — Business continuity for outsourced services
 - **Source:** EBA/GL/2019/02 s.9 (paras 48-49)
 - **Requirement:** Continuity plans must cover failure or disruption of an outsourced service.
-- **Reviewer signals:** Outbound vendor calls without timeouts; removal of retries, fallbacks or the fail-closed path for a critical vendor; code that releases a payment when a control vendor is unavailable.
+- **Reviewer signals:** Outbound vendor calls without timeouts; removal of retries, fallbacks or the fail-closed path for a critical vendor; code that releases a payment when a control vendor is unavailable (fail-open); tests that assert fail-closed behaviour being deleted or rewritten to match a weaker behaviour; raised timeouts.
 - **Repo evidence:** `PaymentOrchestrator` fail-closed handling and its tests.
 
 ### OUTS-11 — Register of outsourcing arrangements
@@ -75,7 +75,7 @@
 ### OUTS-13.2 — Security of data and systems
 - **Source:** EBA/GL/2019/02 s.13.2 (paras 81-84)
 - **Requirement:** Data and systems exposed to a provider must be protected, with security requirements set for the arrangement and the data location understood.
-- **Reviewer signals:** Sensitive fields (IBAN, name, account identifiers) in vendor payloads or logs beyond what is approved; unencrypted transport; new data location or region.
+- **Reviewer signals:** Sensitive fields (IBAN, name, e-mail, address, account identifiers) in vendor payloads or application logs beyond what is approved, even when the @third_party declaration itself looks correct; unencrypted transport; new data location or region.
 - **Repo evidence:** `data_classes`, `data_location`, per-vendor data-class check in `@third_party`.
 
 ### OUTS-14 — Ongoing oversight of outsourced functions
@@ -104,7 +104,7 @@
 ### ICT-3.4.2 — Logical security
 - **Source:** EBA/GL/2019/04 s.3.4.2 (paras 31-32)
 - **Requirement:** Restrict access to data and systems, including electronic access by applications, to the minimum required for the service.
-- **Reviewer signals:** Direct use of HTTP, socket or SMTP clients outside the approved egress module; endpoints taken from environment variables or remote config; widening of a vendor's hosts or data classes.
+- **Reviewer signals:** Direct use of HTTP, socket or SMTP clients outside the approved egress module; endpoints taken from environment variables or config files; widening of a vendor's hosts or data classes; infrastructure rules that open egress to 0.0.0.0/0.
 - **Repo evidence:** `payment_service/egress.py` as the only outbound path, per-vendor host allowlist.
 - **DORA cross-ref (verify):** Art. 9.
 
