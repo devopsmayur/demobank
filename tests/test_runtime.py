@@ -63,7 +63,7 @@ def test_happy_path_is_audited(fake_net, caplog):
     caplog.set_level(logging.INFO, logger="ict.audit")
     assert PaymentOrchestrator().submit(P) == PaymentStatus.SUBMITTED
     outcomes = [json.loads(r.message)["outcome"] for r in caplog.records]
-    assert outcomes.count("ALLOW") == 3  # screening, core banking, e-mail
+    assert outcomes.count("ALLOW") == 4  # sanctions, fraud, core banking, e-mail
 
 
 def test_sanctions_hit_rejects(monkeypatch):
@@ -86,3 +86,35 @@ def test_governance_denial_is_not_masked_as_outage():
 
     with pytest.raises(EgressDenied):
         PaymentOrchestrator(screen=denied).submit(P)
+
+
+def test_high_fraud_score_is_held_for_review():
+    orch = PaymentOrchestrator(screen=lambda p: {"hit": False}, fraud=lambda p: {"score": 0.93},
+                               post=lambda p: pytest.fail("must not release"))
+    assert orch.submit(P) == PaymentStatus.HELD_FOR_REVIEW
+    assert orch.manual_review_queue == [P]
+
+
+def test_fraud_vendor_outage_fails_closed():
+    def down(_):
+        raise TimeoutError("fraud vendor down")
+
+    orch = PaymentOrchestrator(screen=lambda p: {"hit": False}, fraud=down,
+                               post=lambda p: pytest.fail("must not release"))
+    assert orch.submit(P) == PaymentStatus.HELD_FOR_REVIEW
+
+
+def test_fraud_payload_is_minimised(monkeypatch):
+    sent = {}
+
+    def opener(req, timeout=5):
+        sent["body"] = json.loads(req.data)
+        sent["timeout"] = timeout
+        return FakeResp(json.dumps({"score": 0.1}).encode())
+
+    monkeypatch.setattr(egress, "_opener", opener)
+    from payment_service.integrations.fraud_scoring import score_payment
+
+    score_payment(P)
+    assert set(sent["body"]) == {"iban", "amount"}   # no name, no e-mail
+    assert sent["timeout"] == 3.0

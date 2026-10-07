@@ -49,3 +49,18 @@ vendors:
     exit_plan: docs/exit/V-003.md
     subcontractors: []
     data_location: EEA
+
+  - id: V-004
+    name: FraudScore AI (payment fraud scoring SaaS)
+    type: external
+    service: Real-time fraud risk score for outgoing payments
+    hosts: ["api.fraudscore-ai.io"]
+    criticality: critical_or_important
+    data_classes: [iban, amount]          # minimised: no name or e-mail is shared
+    dora_register_id: RoI-2026-0101
+    assessment_ticket: TPRM-1301
+    approved_on: 2026-10-07
+    next_review: 2027-10-07
+    exit_plan: docs/exit/V-004.md
+    subcontractors: ["CloudHost EU-West"]
+    data_location: EEA
