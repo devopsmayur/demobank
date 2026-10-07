@@ -3,6 +3,7 @@
 Shows how to turn third-party risk requirements into pre-merge controls for a payments service.
 
 ```
+EBA_ICT_OUTSOURCING_CONTROLS.md      EBA control digest (IDs cited by CodeRabbit and CI)
 governance/approved-vendors.yaml   register (single source of truth)
 payment_service/                   clean sample service (@third_party + guarded egress)
 tools/vendor_guard.py              deterministic CI gate, findings tagged with guideline refs

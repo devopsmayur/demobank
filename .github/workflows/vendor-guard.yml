@@ -8,7 +8,8 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install -r requirements.txt pytest
-      - run: python tools/vendor_guard.py --json vendor-guard-report.json
+      # Findings cite controls from EBA_ICT_OUTSOURCING_CONTROLS.md and are summarised on the run page
+      - run: python tools/vendor_guard.py --json vendor-guard-report.json --markdown "$GITHUB_STEP_SUMMARY"
       - run: pytest -q
       - uses: actions/upload-artifact@v4
         if: always()

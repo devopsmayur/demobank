@@ -14,6 +14,7 @@ import ast
 import datetime as dt
 import fnmatch
 import json
+import os
 import re
 import sys
 from dataclasses import asdict, dataclass, field
@@ -21,24 +22,33 @@ from pathlib import Path
 
 import yaml
 
-OUTS = "EBA/GL/2019/02 (Outsourcing)"
-ICT = "EBA/GL/2019/04 (ICT & security risk)"
-DORA = "DORA Reg. (EU) 2022/2554"
+CONTROLS_FILE = "EBA_ICT_OUTSOURCING_CONTROLS.md"
 
+# rule -> (title, control IDs defined in EBA_ICT_OUTSOURCING_CONTROLS.md)
 RULES = {
-    "VG-001": ("Endpoint not approved for declared vendor",
-               [f"{OUTS} s.12 pre-outsourcing analysis & due diligence", f"{DORA} Art.28(4)"]),
-    "VG-002": ("Unapproved external SDK / dependency",
-               [f"{ICT} s.3.6.2 ICT systems acquisition & development", f"{OUTS} s.12", f"{DORA} Art.28(4)"]),
-    "VG-003": ("Network call bypasses guarded egress or uses dynamic endpoint",
-               [f"{ICT} s.3.4 information security (network/logical security)", f"{DORA} Art.9"]),
-    "VG-004": ("External endpoint used without @third_party declaration",
-               [f"{OUTS} s.11 documentation / register of arrangements", f"{DORA} Art.28(3) register of information"]),
-    "VG-005": ("Data class not approved for vendor",
-               [f"{ICT} s.3.4 data classification & protection", f"{OUTS} s.12 risk assessment (data protection)"]),
-    "VG-006": ("Vendor register entry incomplete or review expired",
-               [f"{OUTS} s.11 / s.14 oversight / s.15 exit strategies", f"{DORA} Art.28(3), Art.28(8)"]),
+    "VG-001": ("Endpoint not approved for declared vendor", ["OUTS-12.2", "OUTS-12.3", "OUTS-11"]),
+    "VG-002": ("Unapproved external SDK / dependency", ["ICT-3.6.2", "OUTS-12.3"]),
+    "VG-003": ("Network call bypasses guarded egress or uses dynamic endpoint", ["ICT-3.4.2", "ICT-3.4.5"]),
+    "VG-004": ("External endpoint used without @third_party declaration", ["OUTS-11"]),
+    "VG-005": ("Data class not approved for vendor", ["ICT-3.3.3", "OUTS-13.2", "OUTS-12.2"]),
+    "VG-006": ("Vendor register entry incomplete or review expired", ["OUTS-11", "OUTS-14", "OUTS-15"]),
 }
+
+
+def load_controls(path: str) -> dict[str, str]:
+    """Parse '### ID — title' headings and their '**Source:**' line from the controls markdown."""
+    controls, current = {}, None
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        m = re.match(r"^###\s+([A-Z]+-[\d.]+)\s+[—-]\s+(.*)$", line)
+        if m:
+            current = m.group(1)
+            controls[current] = m.group(2).strip()
+            continue
+        m = re.match(r"^- \*\*Source:\*\*\s+(.*)$", line)
+        if m and current:
+            controls[current] = f"{m.group(1).strip()} – {controls[current]}"
+    return controls
+
 
 HTTP_MODULES = {"requests", "httpx", "aiohttp", "urllib3", "http.client", "urllib.request",
                 "socket", "smtplib", "ftplib", "websockets"}
@@ -87,7 +97,7 @@ class Guard:
         self.findings: list[Finding] = []
 
     def add(self, rule, file, line, msg, severity="error"):
-        self.findings.append(Finding(rule, severity, file, line, msg, RULES[rule][1]))
+        self.findings.append(Finding(rule, severity, file, line, msg, list(RULES[rule][1])))
 
     # ---------- Python source ----------
     def scan_python(self, path: Path, rel: str):
@@ -205,6 +215,8 @@ def main(argv=None) -> int:
     ap.add_argument("--egress-module", default="payment_service/egress.py")
     ap.add_argument("--as-of", default=dt.date.today().isoformat())
     ap.add_argument("--json", help="write JSON report (audit evidence)")
+    ap.add_argument("--controls", default=CONTROLS_FILE, help="EBA controls markdown")
+    ap.add_argument("--markdown", help="write markdown summary (e.g. $GITHUB_STEP_SUMMARY)")
     a = ap.parse_args(argv)
 
     cwd = Path.cwd()
@@ -226,13 +238,36 @@ def main(argv=None) -> int:
         g.scan_requirements(Path(req), rel(Path(req)))
     g.check_register(cwd, dt.date.fromisoformat(a.as_of), a.register)
 
+    controls = load_controls(a.controls)
     errors = [f for f in g.findings if f.severity == "error"]
     for f in g.findings:
         print(f"[{f.severity.upper()}] {f.rule} {f.file}:{f.line}  {f.message}")
-        print(f"        {RULES[f.rule][0]} | refs: {'; '.join(f.refs)}")
+        print(f"        Rule: {RULES[f.rule][0]}")
+        for cid in f.refs:
+            print(f"        Control {cid}: {controls.get(cid, 'UNKNOWN CONTROL')}")
+        print(f"        See: {a.controls}")
     print(f"\nvendor_guard: {len(errors)} error(s), {len(g.findings) - len(errors)} warning(s)")
     if a.json:
-        Path(a.json).write_text(json.dumps([asdict(f) for f in g.findings], indent=2))
+        out = []
+        for f in g.findings:
+            d = asdict(f)
+            d["controls"] = [{"id": c, "detail": controls.get(c, "")} for c in f.refs]
+            d["guideline_doc"] = a.controls
+            d.pop("refs")
+            out.append(d)
+        Path(a.json).write_text(json.dumps(out, indent=2))
+    if a.markdown:
+        repo, sha = os.environ.get("GITHUB_REPOSITORY"), os.environ.get("GITHUB_SHA")
+        link = f"https://github.com/{repo}/blob/{sha}/{a.controls}" if repo and sha else a.controls
+        lines = ["## Third-party ICT gate", "",
+                 f"{len(errors)} error(s). Controls are defined in [{a.controls}]({link}).", ""]
+        if g.findings:
+            lines += ["| Rule | Location | Finding | EBA controls |", "|---|---|---|---|"]
+            for f in g.findings:
+                cs = ", ".join(f"[{c}]({link})" for c in f.refs)
+                lines.append(f"| {f.rule} | `{f.file}:{f.line}` | {f.message} | {cs} |")
+        with open(a.markdown, "a", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
     return 1 if errors else 0
 
 
