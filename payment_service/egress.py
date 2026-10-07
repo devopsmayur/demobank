@@ -28,7 +28,7 @@ def _record(outcome: str, vendor_id, host, classes, reason: str = "") -> None:
     }))
 
 
-def guarded_post_json(url: str, payload: dict, timeout: float = 5.0) -> dict:
+def guarded_post_json(url: str, payload: dict, timeout: float = 60.0) -> dict:
     host = (urlparse(url).hostname or "").lower()
     ctx = current_context()
     if ctx is None:

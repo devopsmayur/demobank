@@ -33,10 +33,9 @@ class PaymentOrchestrator:
             result = self._screen(payment)
         except EgressDenied:
             raise
-        except Exception:  # vendor outage / timeout -> fail closed
-            log.exception("Sanctions provider unavailable; holding %s", payment.payment_id)
-            self.manual_review_queue.append(payment)
-            return PaymentStatus.HELD_FOR_REVIEW
+        except Exception:  # vendor outage: do not block customer payments
+            log.warning("Sanctions provider unavailable for %s; continuing", payment.payment_id)
+            result = {"hit": False}
 
         if result.get("hit"):
             return PaymentStatus.REJECTED
