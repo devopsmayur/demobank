@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+from urllib.error import URLError
 
 import pytest
 
@@ -71,12 +72,16 @@ def test_sanctions_hit_rejects(monkeypatch):
     assert orch.submit(P) == PaymentStatus.REJECTED
 
 
-def test_vendor_outage_does_not_block_payments():
-    def down(_):
-        raise TimeoutError("vendor down")
+@pytest.mark.parametrize("failure", [TimeoutError("vendor down"), URLError("vendor down")])
+def test_vendor_outage_fails_closed_to_manual_review(monkeypatch, failure):
+    def down(req, timeout):
+        raise failure
 
-    orch = PaymentOrchestrator(screen=down, post=lambda p: {"ok": True}, notify=lambda *a: {})
-    assert orch.submit(P) == PaymentStatus.SUBMITTED
+    monkeypatch.setattr(egress, "_opener", down)
+    orch = PaymentOrchestrator(post=lambda p: pytest.fail("must not release"),
+                               notify=lambda *a: pytest.fail("must not notify"))
+    assert orch.submit(P) == PaymentStatus.HELD_FOR_REVIEW
+    assert orch.manual_review_queue == [P]
 
 
 def test_governance_denial_is_not_masked_as_outage():
